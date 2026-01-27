@@ -1,4 +1,4 @@
-import { writable, derived } from 'svelte/store'
+import { writable, derived, get } from 'svelte/store'
 
 // Normalize text to use only keyboard-typeable characters
 function normalizeText(text) {
@@ -62,10 +62,10 @@ export const wpmRecordsLenient = writable({
 
 // Save records whenever they change
 function saveAllRecords() {
-  let strict, lenient
-  wpmRecordsStrict.subscribe(r => strict = r)()
-  wpmRecordsLenient.subscribe(r => lenient = r)()
-  localStorage.setItem('typingGameRecords', JSON.stringify({ strict, lenient }))
+  localStorage.setItem('typingGameRecords', JSON.stringify({
+    strict: get(wpmRecordsStrict),
+    lenient: get(wpmRecordsLenient)
+  }))
 }
 
 wpmRecordsStrict.subscribe(saveAllRecords)
@@ -121,29 +121,22 @@ function calculateWpmForWindow(history, windowMs, startTime, minKeystrokes = 12)
 
 // Stats
 export const stats = derived(
-  [typedChars, startTime, keystrokeHistory],
-  ([$typedChars, $startTime, $history]) => {
-    // Filter out skipped characters for accuracy calculation
-    const actualTyped = $typedChars.filter(c => !c.skipped)
-
-    if (!$startTime || actualTyped.length === 0) {
+  [startTime, keystrokeHistory],
+  ([$startTime, $history]) => {
+    if (!$startTime || $history.length === 0) {
       return { wpm: 0, accuracy: 100, wpm5s: 0, wpm10s: 0, wpm30s: 0 }
     }
 
-    // Use keystroke history for accuracy
-    const correctStrokes = $history.filter(k => k.correct)
-    const totalKeystrokes = $history.length
-    const accuracy = totalKeystrokes > 0 ? Math.round((correctStrokes.length / totalKeystrokes) * 100) : 100
+    const correctCount = $history.filter(k => k.correct).length
+    const accuracy = Math.round((correctCount / $history.length) * 100)
 
-    // Main WPM uses a rolling 4-second window for responsive current speed
-    const wpm = calculateWpmForWindow($history, 4000, $startTime, 5)
-
-    // Rolling WPM for different windows
-    const wpm5s = calculateWpmForWindow($history, 5000, $startTime)
-    const wpm10s = calculateWpmForWindow($history, 10000, $startTime)
-    const wpm30s = calculateWpmForWindow($history, 30000, $startTime)
-
-    return { wpm, accuracy, wpm5s, wpm10s, wpm30s }
+    return {
+      wpm: calculateWpmForWindow($history, 4000, $startTime, 5),
+      accuracy,
+      wpm5s: calculateWpmForWindow($history, 5000, $startTime),
+      wpm10s: calculateWpmForWindow($history, 10000, $startTime),
+      wpm30s: calculateWpmForWindow($history, 30000, $startTime)
+    }
   }
 )
 
@@ -174,42 +167,26 @@ export function resetTypingState() {
 
 // Calculate and store last session WPM (call this 2s after typing stops)
 export function calculateLastSessionWpm() {
-  let history
-  keystrokeHistory.subscribe(h => history = h)()
-
-  if (history.length < 5) {
-    lastSessionWpm.set(null)
-    return
-  }
+  const history = get(keystrokeHistory)
+  if (history.length < 5) return lastSessionWpm.set(null)
 
   // Find the last "session" - keystrokes with < 2s gaps between them
-  const SESSION_GAP = 2000
   let sessionStart = history.length - 1
-
   for (let i = history.length - 1; i > 0; i--) {
-    const gap = history[i].timestamp - history[i - 1].timestamp
-    if (gap > SESSION_GAP) break
+    if (history[i].timestamp - history[i - 1].timestamp > 2000) break
     sessionStart = i - 1
   }
 
-  const sessionStrokes = history.slice(sessionStart)
-  if (sessionStrokes.length < 5) {
-    lastSessionWpm.set(null)
-    return
-  }
+  const session = history.slice(sessionStart)
+  if (session.length < 5) return lastSessionWpm.set(null)
 
-  const correctStrokes = sessionStrokes.filter(k => k.correct).length
-  const firstStroke = sessionStrokes[0].timestamp
-  const lastStroke = sessionStrokes[sessionStrokes.length - 1].timestamp
-  const elapsed = (lastStroke - firstStroke) / 1000 / 60 // minutes
+  const correctCount = session.filter(k => k.correct).length
+  const elapsed = (session[session.length - 1].timestamp - session[0].timestamp) / 1000 / 60
 
-  if (elapsed <= 0) {
-    lastSessionWpm.set(null)
-    return
-  }
+  if (elapsed <= 0) return lastSessionWpm.set(null)
 
-  const wpm = Math.round((correctStrokes / 5) / elapsed)
-  lastSessionWpm.set(wpm > 300 ? null : wpm) // Filter glitches
+  const wpm = Math.round((correctCount / 5) / elapsed)
+  lastSessionWpm.set(wpm > 300 ? null : wpm)
 }
 
 // Record a keystroke for WPM tracking
@@ -217,28 +194,24 @@ export function recordKeystroke(correct) {
   keystrokeHistory.update(h => [...h, { timestamp: Date.now(), correct }])
 }
 
-// Update WPM records if current rolling WPM is higher
-// Cap at 300 WPM to filter out calculation glitches (world record is ~216 WPM)
-export function updateWpmRecords(wpm5s, wpm10s, wpm30s) {
-  const MAX_WPM = 300
-  let isStrict
-  strictMode.subscribe(s => isStrict = s)()
+// Get the WPM records store for current mode
+function getCurrentRecordsStore() {
+  return get(strictMode) ? wpmRecordsStrict : wpmRecordsLenient
+}
 
-  const store = isStrict ? wpmRecordsStrict : wpmRecordsLenient
-  store.update(r => ({
-    best5s: Math.max(r.best5s, Math.min(wpm5s, MAX_WPM)),
-    best10s: Math.max(r.best10s, Math.min(wpm10s, MAX_WPM)),
-    best30s: Math.max(r.best30s, Math.min(wpm30s, MAX_WPM))
+// Update WPM records if current rolling WPM is higher (capped at 300)
+export function updateWpmRecords(wpm5s, wpm10s, wpm30s) {
+  const cap = v => Math.min(v, 300)
+  getCurrentRecordsStore().update(r => ({
+    best5s: Math.max(r.best5s, cap(wpm5s)),
+    best10s: Math.max(r.best10s, cap(wpm10s)),
+    best30s: Math.max(r.best30s, cap(wpm30s))
   }))
 }
 
 // Reset WPM records for current mode
 export function resetWpmRecords() {
-  let isStrict
-  strictMode.subscribe(s => isStrict = s)()
-
-  const store = isStrict ? wpmRecordsStrict : wpmRecordsLenient
-  store.set({ best5s: 0, best10s: 0, best30s: 0 })
+  getCurrentRecordsStore().set({ best5s: 0, best10s: 0, best30s: 0 })
 }
 
 // Save book data to localStorage for persistence across refreshes
@@ -315,42 +288,23 @@ export function loadBook(title, chapterList) {
   }
 }
 
-// Move to next chapter
-export function nextChapter() {
-  saveProgress() // Save current chapter progress
+// Navigate to a different chapter
+function goToChapter(newIdx) {
+  saveProgress()
+  const chapterList = get(chapters)
+  if (newIdx < 0 || newIdx >= chapterList.length) return
 
-  let chapterList, currentIdx
-  chapters.subscribe(c => chapterList = c)()
-  currentChapterIndex.subscribe(i => currentIdx = i)()
-
-  if (currentIdx < chapterList.length - 1) {
-    const newIdx = currentIdx + 1
-    currentChapterIndex.set(newIdx)
-
-    // Restore progress for new chapter if available
-    const saved = loadProgressForBook(currentBookHash)
-    const chapterText = chapterList[newIdx]?.content || ''
-    restoreChapterProgress(saved?.chapters?.[newIdx], chapterText)
-  }
+  currentChapterIndex.set(newIdx)
+  const saved = loadProgressForBook(currentBookHash)
+  restoreChapterProgress(saved?.chapters?.[newIdx], chapterList[newIdx]?.content || '')
 }
 
-// Move to previous chapter
+export function nextChapter() {
+  goToChapter(get(currentChapterIndex) + 1)
+}
+
 export function prevChapter() {
-  saveProgress() // Save current chapter progress
-
-  let chapterList, currentIdx
-  chapters.subscribe(c => chapterList = c)()
-  currentChapterIndex.subscribe(i => currentIdx = i)()
-
-  if (currentIdx > 0) {
-    const newIdx = currentIdx - 1
-    currentChapterIndex.set(newIdx)
-
-    // Restore progress for new chapter if available
-    const saved = loadProgressForBook(currentBookHash)
-    const chapterText = chapterList[newIdx]?.content || ''
-    restoreChapterProgress(saved?.chapters?.[newIdx], chapterText)
-  }
+  goToChapter(get(currentChapterIndex) - 1)
 }
 
 // Current book hash for identifying saved progress
@@ -387,22 +341,18 @@ function setAllProgress(data) {
 export function saveProgress() {
   if (!currentBookHash) return
 
-  let chapterIdx, pos, chars, errs
-  currentChapterIndex.subscribe(i => chapterIdx = i)()
-  currentPosition.subscribe(p => pos = p)()
-  typedChars.subscribe(t => chars = t)()
-  errorPositions.subscribe(e => errs = [...e])()
-
+  const chapterIdx = get(currentChapterIndex)
   const allProgress = getAllProgress()
+
   if (!allProgress[currentBookHash]) {
     allProgress[currentBookHash] = { lastChapter: chapterIdx, chapters: {} }
   }
 
   allProgress[currentBookHash].lastChapter = chapterIdx
   allProgress[currentBookHash].chapters[chapterIdx] = {
-    position: pos,
-    typedChars: chars,
-    errorPositions: errs
+    position: get(currentPosition),
+    typedChars: get(typedChars),
+    errorPositions: [...get(errorPositions)]
   }
 
   setAllProgress(allProgress)

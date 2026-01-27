@@ -19,11 +19,10 @@
     <div class="stat">
       {#if $lastSessionWpm !== null}
         <span class="value session-wpm">{$lastSessionWpm < 31 ? '🐌' : $lastSessionWpm}</span>
-        <span class="label">Last burst</span>
       {:else}
         <span class="value">{$stats.wpm < 31 ? '🐌' : $stats.wpm}</span>
-        <span class="label">WPM</span>
       {/if}
+      <span class="label">WPM</span>
     </div>
     <div class="stat">
       <span class="value">{$stats.accuracy}%</span>
