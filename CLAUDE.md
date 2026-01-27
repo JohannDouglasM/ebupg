@@ -1,17 +1,42 @@
 # CLAUDE.md - Project Guidelines
 
 ## Project Overview
-EPUB Typing Game - A Svelte web app where users upload EPUB files and practice typing by typing through the book content.
+**EPUBG** - A Svelte 5 typing game where users upload EPUB files and practice typing through book content.
 
 ## Development Commands
-- `npm install` - Install dependencies
 - `npm run dev` - Start development server
 - `npm run build` - Build for production
 
+## Architecture
+
+### Key Files
+- `src/lib/stores.js` - All state management (Svelte stores), WPM calculations, progress saving
+- `src/components/TypingGame.svelte` - Main typing interface, keystroke handling, windowed rendering
+- `src/components/Stats.svelte` - WPM display, accuracy, highscores
+- `src/components/Settings.svelte` - Strict/Lenient toggle, theme toggle
+- `src/lib/epubParser.js` - EPUB file parsing
+
+### Key Features
+- **WPM**: Rolling 4-second window for responsive speed display
+- **Last session WPM**: Shows WPM from last typing burst after 2s pause (same "WPM" label, different color)
+- **Highscores**: Best 5s/10s/30s, separate for Strict vs Lenient mode, auto-switches with toggle
+- **Themes**: "Hay-on-Wye" (cozy) and "Berlin" (cyberpunk neon)
+- **Text normalization**: Smart quotes → straight quotes, double newlines → ¶ (requires Enter)
+- **Progress**: Auto-saved per book (identified by content hash), persists across refresh
+- **Windowed rendering**: Only renders ~2000 chars around cursor for performance
+
+### Patterns Used
+- Use `get()` from svelte/store to read store values in functions
+- Derived stores for computed values (stats, progress, current WPM records)
+- localStorage for persistence (book data, progress, theme, highscores)
+
 ## Code Style
-- Use Svelte 5 runes syntax ($state, $derived, $effect)
-- Keep components focused and single-purpose
-- Prefer explicit over implicit behavior
+- Svelte 5 runes: $state, $derived, $effect
+- Keep components focused
+- Prefer explicit over implicit
+
+## GitHub
+- Repo: https://github.com/JohannDouglasM/ebupg
 
 ---
 
