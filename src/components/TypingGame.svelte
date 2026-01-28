@@ -155,7 +155,7 @@
       if (strict) {
         showError = true
         setTimeout(() => showError = false, 150)
-        return
+        // Don't return - let typing continue but show as error
       }
     }
 
@@ -273,6 +273,18 @@
   // Build character array with states - only for visible window
   let characters = $derived(() => {
     const result = []
+
+    // In strict mode, find the first uncorrected error
+    let firstUncorrectedError = -1
+    if (strict) {
+      for (let j = 0; j < typed.length; j++) {
+        if (typed[j] && !typed[j].correct) {
+          firstUncorrectedError = j
+          break
+        }
+      }
+    }
+
     for (let i = viewStart; i < viewEnd; i++) {
       const char = text[i]
       let state = 'pending'
@@ -281,6 +293,9 @@
         if (!typedEntry) {
           // No entry means this position was skipped
           state = 'skipped'
+        } else if (strict && firstUncorrectedError >= 0 && i >= firstUncorrectedError) {
+          // In strict mode, everything from first uncorrected error onwards is red
+          state = 'incorrect'
         } else if (typedEntry.correct) {
           if (errors.has(i)) {
             // Corrected chars from previous session look like normal correct text
