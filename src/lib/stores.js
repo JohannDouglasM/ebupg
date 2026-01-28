@@ -267,6 +267,50 @@ export function restoreBook() {
 }
 
 // Load book with automatic progress restoration
+// Detect if a chapter is likely front matter (credits, copyright, etc.)
+function isFrontMatter(chapter) {
+  const title = chapter.title.toLowerCase()
+  const content = chapter.content.toLowerCase()
+
+  // Skip based on title patterns
+  const skipTitles = [
+    'title', 'cover', 'copyright', 'rights', 'license', 'legal',
+    'contents', 'table of contents', 'toc',
+    'dedication', 'epigraph', 'frontispiece',
+    'preface', 'foreword', 'introduction', 'prologue',
+    'acknowledgment', 'acknowledgement', 'about the author',
+    'editor', 'translator', 'note', 'front matter'
+  ]
+
+  for (const skip of skipTitles) {
+    if (title.includes(skip)) return true
+  }
+
+  // Skip very short chapters (likely title pages, etc.)
+  if (chapter.content.length < 500) return true
+
+  // Skip if content looks like copyright notice
+  if (content.includes('public domain') ||
+      content.includes('project gutenberg') ||
+      content.includes('all rights reserved') ||
+      content.includes('copyright ©')) {
+    return true
+  }
+
+  return false
+}
+
+// Find the first chapter that looks like actual book content
+function findStartingChapter(chapterList) {
+  for (let i = 0; i < chapterList.length; i++) {
+    if (!isFrontMatter(chapterList[i])) {
+      return i
+    }
+  }
+  // If all chapters look like front matter, just start at 0
+  return 0
+}
+
 export function loadBook(title, chapterList) {
   // Normalize all chapter content to use keyboard-typeable characters
   const normalizedChapters = chapterList.map(ch => ({
@@ -291,7 +335,9 @@ export function loadBook(title, chapterList) {
     const chapterText = normalizedChapters[chapterIdx]?.content || ''
     restoreChapterProgress(saved.chapters?.[chapterIdx], chapterText)
   } else {
-    currentChapterIndex.set(0)
+    // Find first real chapter (skip front matter)
+    const startIdx = findStartingChapter(normalizedChapters)
+    currentChapterIndex.set(startIdx)
     resetTypingState()
   }
 }
