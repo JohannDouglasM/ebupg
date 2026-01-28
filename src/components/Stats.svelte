@@ -1,17 +1,30 @@
 <script>
   import { stats, progress, wpmRecords, resetWpmRecords, lastSessionWpm } from '../lib/stores.js'
+  import { onMount } from 'svelte'
 
   let confirmReset = $state(false)
+  let resetBtn = $state(null)
 
-  function handleReset() {
+  function handleReset(e) {
+    e.stopPropagation()
     if (confirmReset) {
       resetWpmRecords()
       confirmReset = false
     } else {
       confirmReset = true
-      setTimeout(() => confirmReset = false, 3000)
     }
   }
+
+  function handleClickOutside(e) {
+    if (confirmReset && resetBtn && !resetBtn.contains(e.target)) {
+      confirmReset = false
+    }
+  }
+
+  onMount(() => {
+    document.addEventListener('click', handleClickOutside)
+    return () => document.removeEventListener('click', handleClickOutside)
+  })
 </script>
 
 <div class="stats">
@@ -51,8 +64,8 @@
       <span class="value record">{$wpmRecords.best30s < 31 ? '🐌' : $wpmRecords.best30s}</span>
       <span class="label">Best 30s</span>
     </div>
-    <button class="reset-btn" class:confirm={confirmReset} onclick={handleReset}>
-      {confirmReset ? 'Sure?' : '×'}
+    <button class="reset-btn" class:confirm={confirmReset} onclick={handleReset} bind:this={resetBtn}>
+      {confirmReset ? 'Sure you want to reset your highscores?' : '×'}
     </button>
   </div>
 </div>
@@ -165,8 +178,9 @@
     border-color: var(--incorrect);
     color: white;
     width: auto;
-    padding: 0 8px;
-    border-radius: 10px;
-    font-size: 11px;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    white-space: nowrap;
   }
 </style>
