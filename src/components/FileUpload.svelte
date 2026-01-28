@@ -67,39 +67,42 @@
   }
 </script>
 
-<div
-  class="upload-zone"
-  class:dragging={isDragging}
-  role="region"
-  aria-label="File upload drop zone"
-  ondrop={handleDrop}
-  ondragover={handleDragOver}
-  ondragleave={handleDragLeave}
->
-  {#if isLoading}
-    <div class="loading">
-      <div class="spinner"></div>
-      <p>Parsing EPUB...</p>
-    </div>
-  {:else}
-    <div class="upload-content">
-      <div class="icon">📚</div>
-      <h2>Upload an EPUB</h2>
-      <p>Drag and drop your EPUB file here, or click to browse</p>
-      <input
-        type="file"
-        accept=".epub"
-        onchange={handleInputChange}
-        id="file-input"
-      />
-      <label for="file-input" class="browse-btn">Browse Files</label>
-      <button class="example-btn" onclick={loadExample}>or try with an example</button>
-    </div>
-  {/if}
+<div class="upload-wrapper">
+  <div
+    class="upload-zone"
+    class:dragging={isDragging}
+    role="region"
+    aria-label="File upload drop zone"
+    ondrop={handleDrop}
+    ondragover={handleDragOver}
+    ondragleave={handleDragLeave}
+  >
+    {#if isLoading}
+      <div class="loading">
+        <div class="spinner"></div>
+        <p>Parsing EPUB...</p>
+      </div>
+    {:else}
+      <div class="upload-content">
+        <div class="icon">📚</div>
+        <h2>Upload an EPUB</h2>
+        <p>Drag and drop your EPUB file here, or click to browse</p>
+        <input
+          type="file"
+          accept=".epub"
+          onchange={handleInputChange}
+          id="file-input"
+        />
+        <label for="file-input" class="browse-btn">Browse Files</label>
+      </div>
+    {/if}
 
-  {#if error}
-    <p class="error">{error}</p>
-  {/if}
+    {#if error}
+      <p class="error">{error}</p>
+    {/if}
+  </div>
+
+  <button class="example-btn" onclick={loadExample}>Try with an example</button>
 </div>
 
 <style>
@@ -178,22 +181,36 @@
     box-shadow: 0 0 30px var(--accent), 0 0 50px rgba(168, 85, 247, 0.4);
   }
 
+  .upload-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+
   .example-btn {
-    background: var(--button-bg);
-    border: 1px solid var(--border);
+    display: inline-block;
+    padding: 12px 24px;
+    background: var(--accent);
+    color: var(--bg-primary);
+    border: none;
     border-radius: 6px;
-    color: var(--text-primary);
     cursor: pointer;
-    font-size: 14px;
-    padding: 10px 20px;
-    margin-top: 4px;
+    font-weight: 500;
     transition: all 0.2s;
   }
 
   .example-btn:hover {
-    background: var(--button-hover);
-    border-color: var(--accent);
-    color: var(--accent);
+    background: var(--accent-hover);
+  }
+
+  :global(main.cyberpunk) .example-btn {
+    box-shadow: 0 0 20px var(--accent);
+    color: #ffffff;
+  }
+
+  :global(main.cyberpunk) .example-btn:hover {
+    box-shadow: 0 0 30px var(--accent), 0 0 50px rgba(168, 85, 247, 0.4);
   }
 
   .error {
