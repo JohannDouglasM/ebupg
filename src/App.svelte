@@ -131,6 +131,10 @@
 
   main.cyberpunk h1 {
     color: #a855f7;
+    text-shadow:
+      0 0 10px #a855f7,
+      0 0 20px #a855f7,
+      0 0 40px rgba(168, 85, 247, 0.5);
   }
 
   .book-info {
