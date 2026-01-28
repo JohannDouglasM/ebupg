@@ -49,6 +49,22 @@
     const file = e.target.files?.[0]
     if (file) handleFile(file)
   }
+
+  async function loadExample() {
+    error = ''
+    isLoading = true
+
+    try {
+      const response = await fetch('/example.epub')
+      if (!response.ok) throw new Error('Failed to load example')
+      const blob = await response.blob()
+      const file = new File([blob], 'example.epub', { type: 'application/epub+zip' })
+      await handleFile(file)
+    } catch (e) {
+      error = `Failed to load example: ${e.message}`
+      isLoading = false
+    }
+  }
 </script>
 
 <div
@@ -77,6 +93,7 @@
         id="file-input"
       />
       <label for="file-input" class="browse-btn">Browse Files</label>
+      <button class="example-btn" onclick={loadExample}>or try with an example</button>
     </div>
   {/if}
 
@@ -159,6 +176,20 @@
 
   :global(main.cyberpunk) .browse-btn:hover {
     box-shadow: 0 0 30px var(--accent), 0 0 50px rgba(168, 85, 247, 0.4);
+  }
+
+  .example-btn {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 14px;
+    padding: 8px;
+    transition: color 0.2s;
+  }
+
+  .example-btn:hover {
+    color: var(--accent);
   }
 
   .error {
