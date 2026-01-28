@@ -408,7 +408,7 @@
   }
 
   .text-container {
-    font-family: 'Georgia', serif;
+    font-family: 'Consolas', 'Monaco', monospace;
     font-size: 18px;
     line-height: 1.8;
     padding: 24px;
@@ -429,7 +429,6 @@
   }
 
   :global(main.cyberpunk) .text-container {
-    font-family: 'Consolas', 'Monaco', monospace;
     border-color: #3b3b5c;
     box-shadow: 0 0 30px rgba(168, 85, 247, 0.15), inset 0 0 50px rgba(168, 85, 247, 0.02);
   }

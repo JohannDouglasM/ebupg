@@ -179,16 +179,20 @@
   }
 
   .example-btn {
-    background: none;
-    border: none;
-    color: var(--text-secondary);
+    background: var(--button-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-primary);
     cursor: pointer;
     font-size: 14px;
-    padding: 8px;
-    transition: color 0.2s;
+    padding: 10px 20px;
+    margin-top: 4px;
+    transition: all 0.2s;
   }
 
   .example-btn:hover {
+    background: var(--button-hover);
+    border-color: var(--accent);
     color: var(--accent);
   }
 
