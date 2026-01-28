@@ -172,7 +172,8 @@
     }, 2000)
 
     // Record the keystroke and advance position
-    typedChars.update(t => [...t, { char: typedKey, correct: isCorrect }])
+    // Track if error was made in strict mode (for red cascade effect)
+    typedChars.update(t => [...t, { char: typedKey, correct: isCorrect, strictError: !isCorrect && strict }])
     currentPosition.update(p => p + 1)
 
     // Update WPM records (use setTimeout to get updated stats after keystroke)
@@ -274,11 +275,11 @@
   let characters = $derived(() => {
     const result = []
 
-    // In strict mode, find the first uncorrected error
+    // In strict mode, find the first uncorrected error that was made in strict mode
     let firstUncorrectedError = -1
     if (strict) {
       for (let j = 0; j < typed.length; j++) {
-        if (typed[j] && !typed[j].correct) {
+        if (typed[j] && !typed[j].correct && typed[j].strictError) {
           firstUncorrectedError = j
           break
         }
