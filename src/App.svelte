@@ -130,16 +130,7 @@
   }
 
   main.cyberpunk h1 {
-    color: #c084fc;
-    text-shadow:
-      0 0 5px #fff,
-      0 0 10px #fff,
-      0 0 20px #c084fc,
-      0 0 40px #a855f7,
-      0 0 60px #a855f7,
-      0 0 80px #7c3aed;
-    letter-spacing: 4px;
-    font-weight: 700;
+    color: #a855f7;
   }
 
   .book-info {
