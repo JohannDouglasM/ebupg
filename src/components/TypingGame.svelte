@@ -249,6 +249,12 @@
     // Focus the container to capture keyboard events
     textContainer?.focus()
 
+    // If restored from a previous session, scroll to the current position
+    if (position > 0) {
+      // Use setTimeout to ensure the DOM has rendered the characters
+      setTimeout(() => scrollToPosition(), 50)
+    }
+
     // Global keydown listener to auto-focus text container
     function globalKeyHandler(e) {
       // If typing a character and text container exists but isn't focused
@@ -276,7 +282,12 @@
           // No entry means this position was skipped
           state = 'skipped'
         } else if (typedEntry.correct) {
-          state = errors.has(i) ? 'corrected' : 'correct'
+          if (errors.has(i)) {
+            // Corrected chars from previous session look like normal correct text
+            state = typedEntry.restored ? 'correct' : 'corrected'
+          } else {
+            state = 'correct'
+          }
         } else {
           state = 'incorrect'
         }

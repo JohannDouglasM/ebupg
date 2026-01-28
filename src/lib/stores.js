@@ -72,8 +72,16 @@ wpmRecordsStrict.subscribe(saveAllRecords)
 wpmRecordsLenient.subscribe(saveAllRecords)
 
 // Settings
-export const strictMode = writable(true) // true = must fix errors, false = can continue
+const savedStrictMode = typeof localStorage !== 'undefined' ? localStorage.getItem('typingGameStrictMode') : null
+export const strictMode = writable(savedStrictMode !== null ? savedStrictMode === 'true' : false) // default to lenient
 export const theme = writable(localStorage.getItem('typingGameTheme') || 'cozy')
+
+// Save strict mode preference
+strictMode.subscribe(s => {
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem('typingGameStrictMode', String(s))
+  }
+})
 
 // Current mode's WPM records (switches automatically with strictMode)
 export const wpmRecords = derived(
@@ -374,9 +382,10 @@ function restoreChapterProgress(chapterData, chapterText) {
   const preFilled = []
   for (let i = 0; i < chapterData.position && i < chapterText.length; i++) {
     if (chapterData.typedChars && chapterData.typedChars[i]) {
-      preFilled.push(chapterData.typedChars[i])
+      // Mark as restored from previous session
+      preFilled.push({ ...chapterData.typedChars[i], restored: true })
     } else {
-      preFilled.push({ char: chapterText[i], correct: true })
+      preFilled.push({ char: chapterText[i], correct: true, restored: true })
     }
   }
 
