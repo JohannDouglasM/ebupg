@@ -56,6 +56,9 @@ export async function parseEpub(file) {
     }
   })
 
+  // Build TOC map from NCX or nav document for better chapter titles
+  const tocMap = await buildTocMap(opfDoc, manifest, opfDir, zip, parser)
+
   // Extract text from each spine item
   const chapters = []
   for (const item of spineItems) {
@@ -70,9 +73,7 @@ export async function parseEpub(file) {
     if (content) {
       const doc = parser.parseFromString(content, 'application/xhtml+xml')
 
-      // Get chapter title from h1, h2, or title element
-      const titleEl = doc.querySelector('h1, h2, title')
-      const chapterTitle = titleEl?.textContent?.trim() || `Chapter ${chapters.length + 1}`
+      const chapterTitle = findChapterTitle(doc, item.href, tocMap, chapters.length + 1)
 
       // Extract body text
       const body = doc.querySelector('body')
@@ -88,6 +89,115 @@ export async function parseEpub(file) {
   }
 
   return { title: bookTitle, chapters }
+}
+
+/**
+ * Build a map of file hrefs to chapter titles from the EPUB's table of contents.
+ * Tries NCX (EPUB2) and nav (EPUB3) formats.
+ */
+async function buildTocMap(opfDoc, manifest, opfDir, zip, parser) {
+  const tocMap = {}
+
+  // Try EPUB2 NCX file
+  const spineEl = opfDoc.querySelector('spine')
+  const tocId = spineEl?.getAttribute('toc')
+  if (tocId && manifest[tocId]) {
+    try {
+      const ncxPath = opfDir + manifest[tocId].href
+      const ncxContent = await zip.file(ncxPath)?.async('text')
+      if (ncxContent) {
+        const ncxDoc = parser.parseFromString(ncxContent, 'application/xml')
+        ncxDoc.querySelectorAll('navPoint').forEach(navPoint => {
+          const label = navPoint.querySelector('navLabel text')?.textContent?.trim()
+          const src = navPoint.querySelector('content')?.getAttribute('src')
+          if (label && src) {
+            // Store both with and without fragment
+            const baseHref = src.split('#')[0]
+            tocMap[baseHref] = label
+          }
+        })
+      }
+    } catch (e) {
+      // NCX parsing failed, continue
+    }
+  }
+
+  // Try EPUB3 nav document
+  for (const [id, item] of Object.entries(manifest)) {
+    if (item.mediaType?.includes('html')) {
+      try {
+        const navPath = opfDir + item.href
+        const navContent = await zip.file(navPath)?.async('text')
+        if (navContent && navContent.includes('epub:type="toc"')) {
+          const navDoc = parser.parseFromString(navContent, 'application/xhtml+xml')
+          const tocNav = navDoc.querySelector('[epub\\:type="toc"], nav')
+          if (tocNav) {
+            tocNav.querySelectorAll('a').forEach(a => {
+              const label = a.textContent?.trim()
+              const href = a.getAttribute('href')
+              if (label && href) {
+                const baseHref = href.split('#')[0]
+                tocMap[baseHref] = label
+              }
+            })
+            if (Object.keys(tocMap).length > 0) break
+          }
+        }
+      } catch (e) {
+        // Nav parsing failed, continue
+      }
+    }
+  }
+
+  return tocMap
+}
+
+/**
+ * Find the best chapter title using multiple strategies.
+ */
+function findChapterTitle(doc, href, tocMap, fallbackNum) {
+  // 1. Check TOC map first (most reliable)
+  const baseHref = href.split('#')[0]
+  if (tocMap[baseHref]) {
+    return tocMap[baseHref]
+  }
+
+  // 2. Try heading elements (h1, h2, h3)
+  for (const selector of ['h1', 'h2', 'h3']) {
+    const el = doc.querySelector(selector)
+    if (el) {
+      const text = el.textContent?.trim()
+      if (text && text.length < 200) return text
+    }
+  }
+
+  // 3. Try elements with title/chapter class or id
+  const titleEl = doc.querySelector(
+    '[class*="title"], [class*="chapter"], [class*="heading"], ' +
+    '[id*="title"], [id*="chapter"], [id*="heading"]'
+  )
+  if (titleEl) {
+    const text = titleEl.textContent?.trim()
+    if (text && text.length < 200) return text
+  }
+
+  // 4. Try <title> element but skip if it matches the book title
+  const titleTag = doc.querySelector('title')
+  if (titleTag) {
+    const text = titleTag.textContent?.trim()
+    if (text && text.length < 200) return text
+  }
+
+  // 5. Check if first line of body text looks like a title (short, no period)
+  const body = doc.querySelector('body')
+  if (body) {
+    const firstText = body.textContent?.trim().split('\n')[0]?.trim()
+    if (firstText && firstText.length > 0 && firstText.length < 80 && !firstText.includes('.')) {
+      return firstText
+    }
+  }
+
+  return `Chapter ${fallbackNum}`
 }
 
 /**
