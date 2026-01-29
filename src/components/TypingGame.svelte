@@ -37,8 +37,16 @@
   let allChapters = $derived($chapters)
   let currentStats = $derived($stats)
 
-  // Track if chapter is complete
-  let isChapterComplete = $derived(position >= text.length && text.length > 0)
+  // Track if chapter is complete and overlay should show
+  let chapterCompleteDismissed = $state(false)
+  let isChapterComplete = $derived(position >= text.length && text.length > 0 && !chapterCompleteDismissed)
+
+  // Reset dismissed state when position goes back below text length
+  $effect(() => {
+    if (position < text.length) {
+      chapterCompleteDismissed = false
+    }
+  })
 
   // Windowed rendering with scroll-based expansion
   const WINDOW_SIZE = 2000
@@ -117,10 +125,15 @@
       return
     }
 
-    // If chapter complete, Enter goes to next chapter
+    // If chapter complete, Enter dismisses overlay or goes to next chapter
     if (position >= text.length) {
-      if (e.key === 'Enter' && chapterIndex < allChapters.length - 1) {
-        goToNextChapter()
+      if (e.key === 'Enter') {
+        if (!chapterCompleteDismissed) {
+          chapterCompleteDismissed = true
+          if (chapterIndex < allChapters.length - 1) {
+            goToNextChapter()
+          }
+        }
       }
       return
     }
@@ -337,7 +350,7 @@
       <div class="complete-message">
         <h3>Chapter Complete!</h3>
         {#if chapterIndex < allChapters.length - 1}
-          <button onclick={goToNextChapter}>Continue to Next Chapter</button>
+          <button onclick={() => { chapterCompleteDismissed = true; goToNextChapter() }}>Continue to Next Chapter</button>
         {:else}
           <p>You've finished the entire book!</p>
         {/if}
