@@ -3,7 +3,7 @@
   import TypingGame from './components/TypingGame.svelte'
   import Stats from './components/Stats.svelte'
   import Settings from './components/Settings.svelte'
-  import { chapters, bookTitle, theme, restoreBook, closeBook } from './lib/stores.js'
+  import { chapters, bookTitle, currentChapterTitle, theme, restoreBook, closeBook } from './lib/stores.js'
 
   // Try to restore previously loaded book on page load
   restoreBook()
@@ -22,7 +22,7 @@
     <h1>EPUBG</h1>
     {#if hasBook}
       <div class="book-info">
-        <p class="book-title">Reading: {$bookTitle}</p>
+        <p class="book-title">Reading: {$bookTitle}{$currentChapterTitle ? ` — ${$currentChapterTitle}` : ''}</p>
         <button class="close-book" onclick={closeBook} title="Close book and choose another">×</button>
       </div>
     {/if}
