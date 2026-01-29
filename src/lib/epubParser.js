@@ -111,9 +111,11 @@ async function buildTocMap(opfDoc, manifest, opfDir, zip, parser) {
           const label = navPoint.querySelector('navLabel text')?.textContent?.trim()
           const src = navPoint.querySelector('content')?.getAttribute('src')
           if (label && src) {
-            // Store both with and without fragment
+            // Only store the first TOC entry per file (later entries are sub-sections)
             const baseHref = src.split('#')[0]
-            tocMap[baseHref] = label
+            if (!tocMap[baseHref]) {
+              tocMap[baseHref] = label
+            }
           }
         })
       }
@@ -136,8 +138,11 @@ async function buildTocMap(opfDoc, manifest, opfDir, zip, parser) {
               const label = a.textContent?.trim()
               const href = a.getAttribute('href')
               if (label && href) {
+                // Only store the first TOC entry per file
                 const baseHref = href.split('#')[0]
-                tocMap[baseHref] = label
+                if (!tocMap[baseHref]) {
+                  tocMap[baseHref] = label
+                }
               }
             })
             if (Object.keys(tocMap).length > 0) break
