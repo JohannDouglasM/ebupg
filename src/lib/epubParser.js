@@ -56,8 +56,8 @@ export async function parseEpub(file) {
     }
   })
 
-  // Build TOC map from NCX or nav document for better chapter titles
-  const tocMap = await buildTocMap(opfDoc, manifest, opfDir, zip, parser)
+  // Build TOC entries grouped by file (with fragment info)
+  const tocEntries = await buildTocEntries(opfDoc, manifest, opfDir, zip, parser)
 
   // Extract text from each spine item
   const chapters = []
@@ -72,18 +72,28 @@ export async function parseEpub(file) {
 
     if (content) {
       const doc = parser.parseFromString(content, 'application/xhtml+xml')
+      const fileEntries = tocEntries[item.href] || []
 
-      const chapterTitle = findChapterTitle(doc, item.href, tocMap, chapters.length + 1, bookTitle)
+      // If TOC has multiple fragment entries for this file, split at fragments
+      const fragmentEntries = fileEntries.filter(e => e.fragment)
+      if (fragmentEntries.length > 1) {
+        const splitChapters = splitByFragments(doc, fragmentEntries, bookTitle)
+        for (const ch of splitChapters) {
+          if (ch.content.trim()) {
+            chapters.push(ch)
+          }
+        }
+      } else {
+        // Single chapter from this file
+        const body = doc.querySelector('body')
+        const text = extractText(body)
 
-      // Extract body text
-      const body = doc.querySelector('body')
-      const text = extractText(body)
-
-      if (text.trim()) {
-        chapters.push({
-          title: chapterTitle,
-          content: text.trim()
-        })
+        if (text.trim()) {
+          const title = fileEntries.length > 0 && !isBookTitle(fileEntries[0].label, bookTitle)
+            ? fileEntries[0].label
+            : findChapterTitle(doc, bookTitle, chapters.length + 1)
+          chapters.push({ title, content: text.trim() })
+        }
       }
     }
   }
@@ -91,12 +101,24 @@ export async function parseEpub(file) {
   return { title: bookTitle, chapters }
 }
 
+function isBookTitle(text, bookTitle) {
+  return text?.toLowerCase() === bookTitle?.toLowerCase()
+}
+
 /**
- * Build a map of file hrefs to chapter titles from the EPUB's table of contents.
- * Tries NCX (EPUB2) and nav (EPUB3) formats.
+ * Build TOC entries grouped by base file href.
+ * Returns: { 'file.xhtml': [{ label, fragment }, ...], ... }
  */
-async function buildTocMap(opfDoc, manifest, opfDir, zip, parser) {
-  const tocMap = {}
+async function buildTocEntries(opfDoc, manifest, opfDir, zip, parser) {
+  const entries = {}
+
+  function addEntry(src, label) {
+    const parts = src.split('#')
+    const baseHref = parts[0]
+    const fragment = parts[1] || null
+    if (!entries[baseHref]) entries[baseHref] = []
+    entries[baseHref].push({ label, fragment })
+  }
 
   // Try EPUB2 NCX file
   const spineEl = opfDoc.querySelector('spine')
@@ -110,13 +132,7 @@ async function buildTocMap(opfDoc, manifest, opfDir, zip, parser) {
         ncxDoc.querySelectorAll('navPoint').forEach(navPoint => {
           const label = navPoint.querySelector('navLabel text')?.textContent?.trim()
           const src = navPoint.querySelector('content')?.getAttribute('src')
-          if (label && src) {
-            // Only store the first TOC entry per file (later entries are sub-sections)
-            const baseHref = src.split('#')[0]
-            if (!tocMap[baseHref]) {
-              tocMap[baseHref] = label
-            }
-          }
+          if (label && src) addEntry(src, label)
         })
       }
     } catch (e) {
@@ -124,78 +140,109 @@ async function buildTocMap(opfDoc, manifest, opfDir, zip, parser) {
     }
   }
 
-  // Try EPUB3 nav document
-  for (const [id, item] of Object.entries(manifest)) {
-    if (item.mediaType?.includes('html')) {
-      try {
-        const navPath = opfDir + item.href
-        const navContent = await zip.file(navPath)?.async('text')
-        if (navContent && navContent.includes('epub:type="toc"')) {
-          const navDoc = parser.parseFromString(navContent, 'application/xhtml+xml')
-          const tocNav = navDoc.querySelector('[epub\\:type="toc"], nav')
-          if (tocNav) {
-            tocNav.querySelectorAll('a').forEach(a => {
-              const label = a.textContent?.trim()
-              const href = a.getAttribute('href')
-              if (label && href) {
-                // Only store the first TOC entry per file
-                const baseHref = href.split('#')[0]
-                if (!tocMap[baseHref]) {
-                  tocMap[baseHref] = label
-                }
-              }
-            })
-            if (Object.keys(tocMap).length > 0) break
+  // If NCX didn't yield results, try EPUB3 nav document
+  if (Object.keys(entries).length === 0) {
+    for (const [id, item] of Object.entries(manifest)) {
+      if (item.mediaType?.includes('html')) {
+        try {
+          const navPath = opfDir + item.href
+          const navContent = await zip.file(navPath)?.async('text')
+          if (navContent && navContent.includes('epub:type="toc"')) {
+            const navDoc = parser.parseFromString(navContent, 'application/xhtml+xml')
+            const tocNav = navDoc.querySelector('[epub\\:type="toc"], nav')
+            if (tocNav) {
+              tocNav.querySelectorAll('a').forEach(a => {
+                const label = a.textContent?.trim()
+                const href = a.getAttribute('href')
+                if (label && href) addEntry(href, label)
+              })
+              if (Object.keys(entries).length > 0) break
+            }
           }
+        } catch (e) {
+          // Nav parsing failed, continue
         }
-      } catch (e) {
-        // Nav parsing failed, continue
       }
     }
   }
 
-  return tocMap
+  return entries
 }
 
 /**
- * Find the best chapter title using multiple strategies.
+ * Split a document into chapters at TOC fragment boundaries.
  */
-function findChapterTitle(doc, href, tocMap, fallbackNum, bookTitle) {
-  const isBookTitle = (text) => text.toLowerCase() === bookTitle?.toLowerCase()
+function splitByFragments(doc, fragments, bookTitle) {
+  const body = doc.querySelector('body')
+  if (!body) return []
 
-  // 1. Check TOC map first (most reliable)
-  const baseHref = href.split('#')[0]
-  if (tocMap[baseHref] && !isBookTitle(tocMap[baseHref])) {
-    return tocMap[baseHref]
+  // Find fragment elements in the document, keep only those that exist
+  const markers = fragments
+    .map(f => ({ el: doc.getElementById(f.fragment), label: f.label }))
+    .filter(f => f.el)
+
+  if (markers.length === 0) return []
+
+  // Filter out markers whose label is the book title
+  const contentMarkers = markers.filter(m => !isBookTitle(m.label, bookTitle))
+  if (contentMarkers.length === 0) return []
+
+  const results = []
+  for (let i = 0; i < contentMarkers.length; i++) {
+    const range = doc.createRange()
+    range.setStartBefore(contentMarkers[i].el)
+    if (i + 1 < contentMarkers.length) {
+      range.setEndBefore(contentMarkers[i + 1].el)
+    } else {
+      if (body.lastChild) {
+        range.setEndAfter(body.lastChild)
+      }
+    }
+
+    const frag = range.cloneContents()
+    const wrapper = doc.createElement('div')
+    wrapper.appendChild(frag)
+    const text = extractText(wrapper)
+
+    if (text.trim()) {
+      results.push({ title: contentMarkers[i].label, content: text.trim() })
+    }
   }
 
-  // 2. Try heading elements (h1, h2, h3)
+  return results
+}
+
+/**
+ * Find the best chapter title using multiple strategies (for single-chapter files).
+ */
+function findChapterTitle(doc, bookTitle, fallbackNum) {
+  // 1. Try heading elements (h1, h2, h3)
   for (const selector of ['h1', 'h2', 'h3']) {
     const el = doc.querySelector(selector)
     if (el) {
       const text = el.textContent?.trim()
-      if (text && text.length < 200 && !isBookTitle(text)) return text
+      if (text && text.length < 200 && !isBookTitle(text, bookTitle)) return text
     }
   }
 
-  // 3. Try elements with title/chapter class or id
+  // 2. Try elements with title/chapter class or id
   const titleEl = doc.querySelector(
     '[class*="title"], [class*="chapter"], [class*="heading"], ' +
     '[id*="title"], [id*="chapter"], [id*="heading"]'
   )
   if (titleEl) {
     const text = titleEl.textContent?.trim()
-    if (text && text.length < 200 && !isBookTitle(text)) return text
+    if (text && text.length < 200 && !isBookTitle(text, bookTitle)) return text
   }
 
-  // 4. Try <title> element, skip if it matches the book title
+  // 3. Try <title> element, skip if it matches the book title
   const titleTag = doc.querySelector('title')
   if (titleTag) {
     const text = titleTag.textContent?.trim()
-    if (text && text.length < 200 && !isBookTitle(text)) return text
+    if (text && text.length < 200 && !isBookTitle(text, bookTitle)) return text
   }
 
-  // 5. Check first lines of body text for chapter patterns
+  // 4. Check first lines of body text for chapter patterns
   const body = doc.querySelector('body')
   if (body) {
     const bodyText = body.textContent?.trim()
@@ -212,7 +259,7 @@ function findChapterTitle(doc, href, tocMap, fallbackNum, bookTitle) {
     // Use first line if it looks like a title (short, no period, not book title)
     if (lines.length > 0) {
       const firstLine = lines[0]
-      if (firstLine.length > 0 && firstLine.length < 80 && !firstLine.includes('.') && !isBookTitle(firstLine)) {
+      if (firstLine.length > 0 && firstLine.length < 80 && !firstLine.includes('.') && !isBookTitle(firstLine, bookTitle)) {
         return firstLine
       }
     }
