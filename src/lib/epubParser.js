@@ -218,7 +218,7 @@ function findChapterTitle(doc, href, tocMap, fallbackNum, bookTitle) {
     }
   }
 
-  return `Chapter ${fallbackNum}`
+  return `Section ${fallbackNum}`
 }
 
 /**

@@ -269,25 +269,25 @@ export function restoreBook() {
 // Load book with automatic progress restoration
 // Detect if a chapter is likely front matter (credits, copyright, etc.)
 function isFrontMatter(chapter) {
-  const title = chapter.title.toLowerCase()
+  const title = chapter.title.toLowerCase().trim()
   const content = chapter.content.toLowerCase()
 
-  // Skip based on title patterns
-  const skipTitles = [
-    'title', 'cover', 'copyright', 'rights', 'license', 'legal',
-    'contents', 'table of contents', 'toc',
+  // Skip based on exact or near-exact title matches
+  const skipExact = [
+    'cover', 'copyright', 'rights', 'license', 'legal notice',
+    'table of contents', 'contents', 'toc',
     'dedication', 'epigraph', 'frontispiece',
-    'preface', 'foreword', 'introduction', 'prologue',
-    'acknowledgment', 'acknowledgement', 'about the author',
-    'editor', 'translator', 'note', 'front matter'
+    'preface', 'foreword', 'prologue',
+    'acknowledgments', 'acknowledgements',
+    'about the author', 'front matter', 'title page'
   ]
 
-  for (const skip of skipTitles) {
-    if (title.includes(skip)) return true
+  for (const skip of skipExact) {
+    if (title === skip || title === `the ${skip}`) return true
   }
 
-  // Skip very short chapters (likely title pages, etc.)
-  if (chapter.content.length < 500) return true
+  // Skip very short sections (likely title pages, etc.)
+  if (chapter.content.length < 300) return true
 
   // Skip if content looks like copyright notice
   if (content.includes('public domain') ||
