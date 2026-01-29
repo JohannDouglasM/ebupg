@@ -37,16 +37,9 @@
   let allChapters = $derived($chapters)
   let currentStats = $derived($stats)
 
-  // Track if chapter is complete and overlay should show
-  let chapterCompleteDismissed = $state(false)
-  let isChapterComplete = $derived(position >= text.length && text.length > 0 && !chapterCompleteDismissed)
-
-  // Reset dismissed state when position goes back below text length
-  $effect(() => {
-    if (position < text.length) {
-      chapterCompleteDismissed = false
-    }
-  })
+  // Show overlay only when user actively types the last character
+  let showCompleteOverlay = $state(false)
+  let isChapterComplete = $derived(showCompleteOverlay)
 
   // Windowed rendering with scroll-based expansion
   const WINDOW_SIZE = 2000
@@ -125,14 +118,12 @@
       return
     }
 
-    // If chapter complete, Enter dismisses overlay or goes to next chapter
+    // If chapter complete, Enter dismisses overlay and goes to next chapter
     if (position >= text.length) {
       if (e.key === 'Enter') {
-        if (!chapterCompleteDismissed) {
-          chapterCompleteDismissed = true
-          if (chapterIndex < allChapters.length - 1) {
-            goToNextChapter()
-          }
+        showCompleteOverlay = false
+        if (chapterIndex < allChapters.length - 1) {
+          goToNextChapter()
         }
       }
       return
@@ -193,6 +184,11 @@
     // Track if error was made in strict mode (for red cascade effect)
     typedChars.update(t => [...t, { char: typedKey, correct: isCorrect, strictError: !isCorrect && strict }])
     currentPosition.update(p => p + 1)
+
+    // Show chapter complete overlay when typing the last character
+    if (position + 1 >= text.length) {
+      showCompleteOverlay = true
+    }
 
     // Update WPM records (use setTimeout to get updated stats after keystroke)
     setTimeout(() => {
@@ -350,7 +346,7 @@
       <div class="complete-message">
         <h3>Chapter Complete!</h3>
         {#if chapterIndex < allChapters.length - 1}
-          <button onclick={() => { chapterCompleteDismissed = true; goToNextChapter() }}>Continue to Next Chapter</button>
+          <button onclick={() => { showCompleteOverlay = false; goToNextChapter() }}>Continue to Next Chapter</button>
         {:else}
           <p>You've finished the entire book!</p>
         {/if}
