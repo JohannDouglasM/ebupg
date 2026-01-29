@@ -117,8 +117,13 @@
       return
     }
 
-    // If chapter complete, don't accept more input
-    if (position >= text.length) return
+    // If chapter complete, Enter goes to next chapter
+    if (position >= text.length) {
+      if (e.key === 'Enter' && chapterIndex < allChapters.length - 1) {
+        goToNextChapter()
+      }
+      return
+    }
 
     const currentChar = text[position]
 
