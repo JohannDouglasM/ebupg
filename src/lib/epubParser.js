@@ -73,7 +73,7 @@ export async function parseEpub(file) {
     if (content) {
       const doc = parser.parseFromString(content, 'application/xhtml+xml')
 
-      const chapterTitle = findChapterTitle(doc, item.href, tocMap, chapters.length + 1)
+      const chapterTitle = findChapterTitle(doc, item.href, tocMap, chapters.length + 1, bookTitle)
 
       // Extract body text
       const body = doc.querySelector('body')
@@ -155,10 +155,12 @@ async function buildTocMap(opfDoc, manifest, opfDir, zip, parser) {
 /**
  * Find the best chapter title using multiple strategies.
  */
-function findChapterTitle(doc, href, tocMap, fallbackNum) {
+function findChapterTitle(doc, href, tocMap, fallbackNum, bookTitle) {
+  const isBookTitle = (text) => text.toLowerCase() === bookTitle?.toLowerCase()
+
   // 1. Check TOC map first (most reliable)
   const baseHref = href.split('#')[0]
-  if (tocMap[baseHref]) {
+  if (tocMap[baseHref] && !isBookTitle(tocMap[baseHref])) {
     return tocMap[baseHref]
   }
 
@@ -167,7 +169,7 @@ function findChapterTitle(doc, href, tocMap, fallbackNum) {
     const el = doc.querySelector(selector)
     if (el) {
       const text = el.textContent?.trim()
-      if (text && text.length < 200) return text
+      if (text && text.length < 200 && !isBookTitle(text)) return text
     }
   }
 
@@ -178,22 +180,36 @@ function findChapterTitle(doc, href, tocMap, fallbackNum) {
   )
   if (titleEl) {
     const text = titleEl.textContent?.trim()
-    if (text && text.length < 200) return text
+    if (text && text.length < 200 && !isBookTitle(text)) return text
   }
 
-  // 4. Try <title> element but skip if it matches the book title
+  // 4. Try <title> element, skip if it matches the book title
   const titleTag = doc.querySelector('title')
   if (titleTag) {
     const text = titleTag.textContent?.trim()
-    if (text && text.length < 200) return text
+    if (text && text.length < 200 && !isBookTitle(text)) return text
   }
 
-  // 5. Check if first line of body text looks like a title (short, no period)
+  // 5. Check first lines of body text for chapter patterns
   const body = doc.querySelector('body')
   if (body) {
-    const firstText = body.textContent?.trim().split('\n')[0]?.trim()
-    if (firstText && firstText.length > 0 && firstText.length < 80 && !firstText.includes('.')) {
-      return firstText
+    const bodyText = body.textContent?.trim()
+    const lines = bodyText.split('\n').map(l => l.trim()).filter(l => l.length > 0)
+
+    // Look for "CHAPTER X" / "Chapter X" pattern, then use the next line as title
+    if (lines.length > 0) {
+      const chapterPattern = /^chapter\s+[\divxlc]+/i
+      if (chapterPattern.test(lines[0]) && lines.length > 1 && lines[1].length < 80 && !lines[1].includes('.')) {
+        return `${lines[0]} — ${lines[1]}`
+      }
+    }
+
+    // Use first line if it looks like a title (short, no period, not book title)
+    if (lines.length > 0) {
+      const firstLine = lines[0]
+      if (firstLine.length > 0 && firstLine.length < 80 && !firstLine.includes('.') && !isBookTitle(firstLine)) {
+        return firstLine
+      }
     }
   }
 
