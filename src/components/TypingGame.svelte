@@ -149,6 +149,12 @@
       // Only accept single characters
       if (e.key.length !== 1) return
       typedKey = e.key
+      // Normalize typed quote characters to match normalized text
+      // (handles macOS smart quotes, international keyboards, etc.)
+      typedKey = typedKey
+        .replace(/[""„«»″]/g, '"')
+        .replace(/[''‹›′]/g, "'")
+        .replace(/[—–]/g, '-')
     }
 
     const isCorrect = typedKey === currentChar
