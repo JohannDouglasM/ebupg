@@ -248,6 +248,8 @@ export function restoreBook() {
       ...ch,
       content: normalizeText(ch.content)
     }))
+    const sample = renormalizedChapters[0]?.content?.slice(0, 200) || ''
+    console.log('[restoreBook] sample after normalize:', JSON.stringify(sample))
     bookTitle.set(title)
     chapters.set(renormalizedChapters)
     setBookHash(hash)
