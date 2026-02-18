@@ -4,9 +4,9 @@ import { writable, derived, get } from 'svelte/store'
 function normalizeText(text) {
   return text
     // Curly/smart double quotes → straight double quote
-    .replace(/[""„«»]/g, '"')
+    .replace(/[\u201C\u201D\u201E\u00AB\u00BB]/g, '"')
     // Curly/smart single quotes/apostrophes → straight apostrophe
-    .replace(/[''‹›]/g, "'")
+    .replace(/[\u2018\u2019\u2039\u203A]/g, "'")
     // Em dash, en dash → hyphen
     .replace(/[—–]/g, '-')
     // Ellipsis character → three periods

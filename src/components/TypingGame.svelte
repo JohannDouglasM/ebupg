@@ -152,8 +152,8 @@
       // Normalize typed quote characters to match normalized text
       // (handles macOS smart quotes, international keyboards, etc.)
       typedKey = typedKey
-        .replace(/[""„«»″]/g, '"')
-        .replace(/[''‹›′]/g, "'")
+        .replace(/[\u201C\u201D\u201E\u00AB\u00BB\u2033]/g, '"')
+        .replace(/[\u2018\u2019\u2039\u203A\u2032]/g, "'")
         .replace(/[—–]/g, '-')
     }
 
