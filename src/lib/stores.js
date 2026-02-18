@@ -244,15 +244,20 @@ export function restoreBook() {
     const { title, chapters: savedChapters, hash } = JSON.parse(saved)
     if (!title || !savedChapters?.length) return false
 
+    const renormalizedChapters = savedChapters.map(ch => ({
+      ...ch,
+      content: normalizeText(ch.content)
+    }))
     bookTitle.set(title)
-    chapters.set(savedChapters)
+    chapters.set(renormalizedChapters)
     setBookHash(hash)
+    saveBookData(title, renormalizedChapters, hash)
 
     const progress = loadProgressForBook(hash)
     if (progress) {
       const chapterIdx = progress.lastChapter || 0
       currentChapterIndex.set(chapterIdx)
-      const chapterText = savedChapters[chapterIdx]?.content || ''
+      const chapterText = renormalizedChapters[chapterIdx]?.content || ''
       restoreChapterProgress(progress.chapters?.[chapterIdx], chapterText)
     } else {
       currentChapterIndex.set(0)
