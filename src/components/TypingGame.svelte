@@ -158,6 +158,7 @@
     }
 
     const isCorrect = typedKey === currentChar
+    console.log(`[typing] key="${e.key}" (U+${e.key.charCodeAt(0).toString(16).toUpperCase().padStart(4,'0')}) → normalized="${typedKey}" (U+${typedKey.charCodeAt(0).toString(16).toUpperCase().padStart(4,'0')}) | expected="${currentChar}" (U+${currentChar.charCodeAt(0).toString(16).toUpperCase().padStart(4,'0')}) | match=${isCorrect}`)
 
     if (!isCorrect) {
       // Mark this position as having an error
