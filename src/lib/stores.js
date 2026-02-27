@@ -159,16 +159,24 @@ function normalizeStructure(text) {
     .replace(/  +/g, ' ')
 }
 
-// Replace accented chars with ASCII for individually disabled characters
+// Replace accented chars with ASCII for individually disabled characters.
+// A char is only stripped if disabled in ALL groups that contain it.
 function normalizeAccents(text, settings) {
-  let result = text
+  // Collect which lowercase chars are enabled in ANY group
+  const enabledAnywhere = new Set()
   for (const [key, group] of Object.entries(ACCENT_GROUPS)) {
     const charSettings = settings[key]
     if (!charSettings) continue
-    for (const [accented, ascii] of Object.entries(group.map)) {
-      // Look up by lowercase version of the accented char
+    for (const accented of Object.keys(group.map)) {
       const lc = accented.toLowerCase()
-      if (charSettings[lc] === false) {
+      if (charSettings[lc] !== false) enabledAnywhere.add(lc)
+    }
+  }
+  // Replace only chars not enabled in any group
+  let result = text
+  for (const group of Object.values(ACCENT_GROUPS)) {
+    for (const [accented, ascii] of Object.entries(group.map)) {
+      if (!enabledAnywhere.has(accented.toLowerCase())) {
         result = result.split(accented).join(ascii)
       }
     }
