@@ -23,6 +23,7 @@
   import { onMount } from 'svelte'
 
   let textContainer = $state(null)
+  let hiddenInput = $state(null)
   let showError = $state(false)
   let scrollPending = $state(false)
   let sessionTimeout = $state(null)
@@ -98,19 +99,18 @@
 
   function handleKeydown(e) {
     // Ignore modifier keys and special keys
-    if (e.ctrlKey || e.metaKey || e.altKey) return
+    if (e.ctrlKey || e.metaKey) return
     if (['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'Tab', 'Escape'].includes(e.key)) return
 
-    // Prevent default to avoid scrolling, etc
-    e.preventDefault()
-
-    // Start timer on first keypress
-    if (!$isTyping) {
-      startTime.set(Date.now())
-      isTyping.set(true)
-    }
+    // Let dead keys and composing events through so accent composition works
+    if (e.key === 'Dead' || e.isComposing) return
 
     if (e.key === 'Backspace') {
+      e.preventDefault()
+      if (!$isTyping) {
+        startTime.set(Date.now())
+        isTyping.set(true)
+      }
       if (typed.length > 0) {
         currentPosition.update(p => p - 1)
         typedChars.update(t => t.slice(0, -1))
@@ -118,50 +118,75 @@
       return
     }
 
-    // If chapter complete, Enter dismisses overlay and goes to next chapter
-    if (position >= text.length) {
-      if (e.key === 'Enter') {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+
+      // If chapter complete, Enter dismisses overlay and goes to next chapter
+      if (position >= text.length) {
         showCompleteOverlay = false
         if (chapterIndex < allChapters.length - 1) {
           goToNextChapter()
         }
+        return
+      }
+
+      const currentChar = text[position]
+      if (currentChar === '¶') {
+        processChar('¶')
+      } else if (strict) {
+        showError = true
+        setTimeout(() => showError = false, 150)
       }
       return
     }
 
-    const currentChar = text[position]
+    // All other character input flows into the hidden input's oninput handler
+  }
 
-    // Handle paragraph marker (¶) - requires Enter
-    let typedKey
-    if (currentChar === '¶') {
-      if (e.key !== 'Enter') {
-        // Wrong key for paragraph - show error
+  // Handles composed character input from the hidden input element
+  function handleInput(e) {
+    const data = e.data
+    if (!data) return
+
+    // Clear the hidden input
+    if (hiddenInput) hiddenInput.value = ''
+
+    // Process each character (usually just one)
+    for (const char of data) {
+      if (position >= text.length) break
+
+      const currentChar = text[position]
+      // Skip Enter-requiring chars from regular input
+      if (currentChar === '¶') {
         if (strict) {
           showError = true
           setTimeout(() => showError = false, 150)
         }
-        return
+        continue
       }
-      typedKey = '¶'
-    } else {
-      // Ignore Enter for non-paragraph characters
-      if (e.key === 'Enter') return
-      // Only accept single characters
-      if (e.key.length !== 1) return
-      typedKey = e.key
+
+      let typedKey = char
       // Normalize typed quote characters to match normalized text
-      // (handles macOS smart quotes, international keyboards, etc.)
       typedKey = typedKey
         .replace(/[\u201C\u201D\u201E\u00AB\u00BB\u2033]/g, '"')
         .replace(/[\u2018\u2019\u2039\u203A\u2032]/g, "'")
         .replace(/[—–]/g, '-')
+
+      processChar(typedKey)
+    }
+  }
+
+  function processChar(typedKey) {
+    if (!$isTyping) {
+      startTime.set(Date.now())
+      isTyping.set(true)
     }
 
+    const currentChar = text[position]
     const isCorrect = typedKey === currentChar
-    console.log(`[typing] key="${e.key}" (U+${e.key.charCodeAt(0).toString(16).toUpperCase().padStart(4,'0')}) → normalized="${typedKey}" (U+${typedKey.charCodeAt(0).toString(16).toUpperCase().padStart(4,'0')}) | expected="${currentChar}" (U+${currentChar.charCodeAt(0).toString(16).toUpperCase().padStart(4,'0')}) | match=${isCorrect}`)
+    console.log(`[typing] typed="${typedKey}" (U+${typedKey.charCodeAt(0).toString(16).toUpperCase().padStart(4,'0')}) | expected="${currentChar}" (U+${currentChar.charCodeAt(0).toString(16).toUpperCase().padStart(4,'0')}) | match=${isCorrect}`)
 
     if (!isCorrect) {
-      // Mark this position as having an error
       errorPositions.update(s => {
         const newSet = new Set(s)
         newSet.add(position)
@@ -171,43 +196,32 @@
       if (strict) {
         showError = true
         setTimeout(() => showError = false, 150)
-        // Don't return - let typing continue but show as error
       }
     }
 
-    // Record keystroke for WPM tracking
     recordKeystroke(isCorrect)
-
-    // Clear last session WPM when typing resumes
     lastSessionWpm.set(null)
 
-    // Reset session timeout - calculate last session WPM after 2s of no typing
     if (sessionTimeout) clearTimeout(sessionTimeout)
     sessionTimeout = setTimeout(() => {
       calculateLastSessionWpm()
     }, 2000)
 
-    // Record the keystroke and advance position
-    // Track if error was made in strict mode (for red cascade effect)
     typedChars.update(t => [...t, { char: typedKey, correct: isCorrect, strictError: !isCorrect && strict }])
     currentPosition.update(p => p + 1)
 
-    // Show chapter complete overlay when typing the last character
     if (position + 1 >= text.length) {
       showCompleteOverlay = true
     }
 
-    // Update WPM records (use setTimeout to get updated stats after keystroke)
     setTimeout(() => {
       updateWpmRecords(currentStats.wpm5s, currentStats.wpm10s, currentStats.wpm30s)
     }, 0)
 
-    // Save progress periodically
     if (position % 50 === 0) {
       saveProgress()
     }
 
-    // Scroll to keep current position visible
     scrollToPosition()
   }
 
@@ -258,8 +272,12 @@
     keystrokeHistory.set([])
 
     // Focus the container after jumping
-    textContainer?.focus()
+    focusInput()
     saveProgress()
+  }
+
+  function focusInput() {
+    hiddenInput?.focus()
   }
 
   function handleCharClick(e, index) {
@@ -268,22 +286,19 @@
   }
 
   onMount(() => {
-    // Focus the container to capture keyboard events
-    textContainer?.focus()
+    // Focus the hidden input to capture keyboard events
+    focusInput()
 
     // If restored from a previous session, scroll to the current position
     if (position > 0) {
-      // Use setTimeout to ensure the DOM has rendered the characters
       setTimeout(() => scrollToPosition(), 50)
     }
 
-    // Global keydown listener to auto-focus text container
+    // Global keydown listener to auto-focus hidden input
     function globalKeyHandler(e) {
-      // If typing a character and text container exists but isn't focused
-      if (textContainer && document.activeElement !== textContainer) {
-        // Only for printable characters, backspace, or enter
-        if (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Enter') {
-          textContainer.focus()
+      if (hiddenInput && document.activeElement !== hiddenInput) {
+        if (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Enter' || e.key === 'Dead') {
+          focusInput()
         }
       }
     }
@@ -361,14 +376,28 @@
     </div>
   {/if}
 
+  <!-- Hidden input captures composed character input (dead keys, accents) -->
+  <input
+    bind:this={hiddenInput}
+    class="hidden-input"
+    oninput={handleInput}
+    onkeydown={handleKeydown}
+    autocomplete="off"
+    autocorrect="off"
+    autocapitalize="off"
+    spellcheck="false"
+    aria-label="Typing input"
+  />
+
   <div
     class="text-container"
     bind:this={textContainer}
-    tabindex="0"
+    tabindex="-1"
     role="textbox"
     aria-label="Typing area - type the text shown"
     aria-multiline="true"
-    onkeydown={handleKeydown}
+    onclick={focusInput}
+    onkeydown={focusInput}
     onscroll={handleScroll}
   >
     {#if viewStart > 0}<span class="ellipsis">...</span>{/if}
@@ -395,6 +424,14 @@
 </div>
 
 <style>
+  .hidden-input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+    width: 0;
+    height: 0;
+  }
+
   .typing-game {
     display: flex;
     flex-direction: column;
@@ -460,7 +497,7 @@
     color: var(--text-primary);
   }
 
-  .text-container:focus {
+  .typing-game:has(.hidden-input:focus) .text-container {
     border-color: var(--accent);
     box-shadow: 0 0 0 2px var(--focus-ring);
   }
@@ -470,7 +507,7 @@
     box-shadow: 0 0 30px rgba(168, 85, 247, 0.15), inset 0 0 50px rgba(168, 85, 247, 0.02);
   }
 
-  :global(main.cyberpunk) .text-container:focus {
+  :global(main.cyberpunk) .typing-game:has(.hidden-input:focus) .text-container {
     border-color: var(--accent);
     box-shadow: 0 0 15px var(--accent), 0 0 40px rgba(168, 85, 247, 0.3), inset 0 0 30px rgba(168, 85, 247, 0.03);
   }
