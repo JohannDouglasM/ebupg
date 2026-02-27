@@ -1,14 +1,9 @@
 <script>
-  import { ACCENT_GROUPS, accentGroups, chapters, renormalizeBook } from '../lib/stores.js'
+  import { ACCENT_GROUPS, accentGroups } from '../lib/stores.js'
 
   let { onBack } = $props()
 
-  let hasBook = $derived($chapters.length > 0)
   let expandedGroup = $state(null)
-
-  function afterChange() {
-    if (hasBook) renormalizeBook()
-  }
 
   // Master toggle: set all chars in a group on or off
   function toggleGroup(key) {
@@ -18,7 +13,6 @@
     const updated = {}
     for (const ch of Object.keys(chars)) updated[ch] = newVal
     accentGroups.update(g => ({ ...g, [key]: updated }))
-    afterChange()
   }
 
   // Individual char toggle
@@ -27,7 +21,6 @@
       ...g,
       [groupKey]: { ...g[groupKey], [char]: !g[groupKey][char] }
     }))
-    afterChange()
   }
 
   function toggleExpand(key) {

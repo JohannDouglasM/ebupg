@@ -159,34 +159,27 @@ function normalizeStructure(text) {
     .replace(/  +/g, ' ')
 }
 
-// Replace accented chars with ASCII for individually disabled characters.
-// A char is only stripped if disabled in ALL groups that contain it.
-function normalizeAccents(text, settings) {
-  // Collect which lowercase chars are enabled in ANY group
-  const enabledAnywhere = new Set()
+// Check if a typed key is an acceptable match for an expected character,
+// considering accent settings. Returns true if the expected char is an
+// accented char whose group is disabled and the typed key matches the ASCII mapping.
+// Only accepts the simplification if the accent is disabled in ALL groups containing it.
+export function isAccentMatch(typedKey, expectedChar) {
+  const lc = expectedChar.toLowerCase()
+  // Check if enabled in any group
+  const settings = get(accentGroups)
+  let enabledSomewhere = false
+  let ascii = null
   for (const [key, group] of Object.entries(ACCENT_GROUPS)) {
+    if (!(expectedChar in group.map)) continue
     const charSettings = settings[key]
-    if (!charSettings) continue
-    for (const accented of Object.keys(group.map)) {
-      const lc = accented.toLowerCase()
-      if (charSettings[lc] !== false) enabledAnywhere.add(lc)
+    if (!charSettings || charSettings[lc] !== false) {
+      enabledSomewhere = true
+      break
     }
+    ascii = group.map[expectedChar]
   }
-  // Replace only chars not enabled in any group
-  let result = text
-  for (const group of Object.values(ACCENT_GROUPS)) {
-    for (const [accented, ascii] of Object.entries(group.map)) {
-      if (!enabledAnywhere.has(accented.toLowerCase())) {
-        result = result.split(accented).join(ascii)
-      }
-    }
-  }
-  return result
-}
-
-// Full normalization: structure + accents
-function normalizeText(text) {
-  return normalizeAccents(normalizeStructure(text), get(accentGroups))
+  if (enabledSomewhere || ascii === null) return false
+  return typedKey === ascii
 }
 
 // Book data
@@ -398,46 +391,20 @@ function saveBookData(title, normalizedChapters, hash) {
   }
 }
 
-// Save raw (structure-normalized but not accent-stripped) chapters
-function saveRawChapters(title, rawChapters, hash) {
-  try {
-    localStorage.setItem('typingGameBookRaw', JSON.stringify({
-      title,
-      chapters: rawChapters,
-      hash
-    }))
-  } catch (e) {
-    console.warn('Could not save raw book to localStorage:', e)
-  }
-}
 
 // Restore book from localStorage on page load
 export function restoreBook() {
   try {
-    // Prefer raw chapters (structure-normalized only) so we can apply current accent settings
-    const rawSaved = localStorage.getItem('typingGameBookRaw')
-    const saved = rawSaved || localStorage.getItem('typingGameBook')
+    const saved = localStorage.getItem('typingGameBookRaw') || localStorage.getItem('typingGameBook')
     if (!saved) return false
 
     const { title, chapters: savedChapters, hash } = JSON.parse(saved)
     if (!title || !savedChapters?.length) return false
 
-    // If loaded from old format, structure-normalize and save as raw for future use
-    let rawChapters
-    if (rawSaved) {
-      rawChapters = savedChapters
-    } else {
-      rawChapters = savedChapters.map(ch => ({
-        ...ch,
-        content: normalizeStructure(ch.content)
-      }))
-      saveRawChapters(title, rawChapters, hash)
-    }
-
-    const groups = get(accentGroups)
-    const renormalizedChapters = rawChapters.map(ch => ({
+    // Re-apply structure normalization to pick up any future changes
+    const renormalizedChapters = savedChapters.map(ch => ({
       ...ch,
-      content: normalizeAccents(ch.content, groups)
+      content: normalizeStructure(ch.content)
     }))
 
     bookTitle.set(title)
@@ -509,17 +476,10 @@ function findStartingChapter(chapterList) {
 }
 
 export function loadBook(title, chapterList) {
-  // Structure-normalize first (quotes, dashes, etc.) — this is the "raw" version
-  const rawChapters = chapterList.map(ch => ({
+  // Structure-normalize (quotes, dashes, etc.) — accents stay in the text
+  const normalizedChapters = chapterList.map(ch => ({
     ...ch,
     content: normalizeStructure(ch.content)
-  }))
-
-  // Apply accent normalization based on current settings
-  const groups = get(accentGroups)
-  const normalizedChapters = rawChapters.map(ch => ({
-    ...ch,
-    content: normalizeAccents(ch.content, groups)
   }))
 
   bookTitle.set(title)
@@ -529,8 +489,6 @@ export function loadBook(title, chapterList) {
   const hash = generateBookHash(chapterList)
   setBookHash(hash)
 
-  // Save both raw and fully normalized for persistence
-  saveRawChapters(title, rawChapters, hash)
   saveBookData(title, normalizedChapters, hash)
 
   const saved = loadProgressForBook(hash)
@@ -652,31 +610,6 @@ export function setBookHash(hash) {
   currentBookHash = hash
 }
 
-// Re-apply accent settings to the current book (called when toggles change)
-export function renormalizeBook() {
-  try {
-    const rawSaved = localStorage.getItem('typingGameBookRaw')
-    if (!rawSaved) return
-
-    const { title, chapters: rawChapters, hash } = JSON.parse(rawSaved)
-    if (!title || !rawChapters?.length) return
-
-    const groups = get(accentGroups)
-    const normalizedChapters = rawChapters.map(ch => ({
-      ...ch,
-      content: normalizeAccents(ch.content, groups)
-    }))
-
-    chapters.set(normalizedChapters)
-    saveBookData(title, normalizedChapters, hash)
-
-    // Reset typing state to avoid position drift from char-count changes
-    resetTypingState()
-  } catch (e) {
-    console.warn('Could not renormalize book:', e)
-  }
-}
-
 // Close current book and clear saved book data
 export function closeBook() {
   saveProgress() // Save progress before closing
@@ -686,5 +619,5 @@ export function closeBook() {
   resetTypingState()
   currentBookHash = null
   localStorage.removeItem('typingGameBook')
-  localStorage.removeItem('typingGameBookRaw')
+  localStorage.removeItem('typingGameBookRaw') // clean up legacy key
 }

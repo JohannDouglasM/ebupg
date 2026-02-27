@@ -18,7 +18,8 @@
     stats,
     keystrokeHistory,
     lastSessionWpm,
-    calculateLastSessionWpm
+    calculateLastSessionWpm,
+    isAccentMatch
   } from '../lib/stores.js'
   import { onMount } from 'svelte'
 
@@ -217,7 +218,7 @@
     }
 
     const currentChar = text[position]
-    const isCorrect = typedKey === currentChar
+    const isCorrect = typedKey === currentChar || isAccentMatch(typedKey, currentChar)
     console.log(`[typing] typed="${typedKey}" (U+${typedKey.charCodeAt(0).toString(16).toUpperCase().padStart(4,'0')}) | expected="${currentChar}" (U+${currentChar.charCodeAt(0).toString(16).toUpperCase().padStart(4,'0')}) | match=${isCorrect}`)
 
     if (!isCorrect) {
