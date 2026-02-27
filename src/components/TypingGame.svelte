@@ -24,6 +24,7 @@
 
   let textContainer = $state(null)
   let hiddenInput = $state(null)
+  let isComposing = $state(false)
   let showError = $state(false)
   let scrollPending = $state(false)
   let sessionTimeout = $state(null)
@@ -145,6 +146,10 @@
 
   // Handles composed character input from the hidden input element
   function handleInput(e) {
+    // Skip input events during composition (dead keys, IME)
+    // The final result comes after compositionend
+    if (isComposing) return
+
     const data = e.data
     if (!data) return
 
@@ -173,6 +178,35 @@
         .replace(/[—–]/g, '-')
 
       processChar(typedKey)
+    }
+  }
+
+  function handleCompositionStart() {
+    isComposing = true
+  }
+
+  function handleCompositionEnd(e) {
+    isComposing = false
+    // Process the composed result (e.g. é from ´+e)
+    if (e.data) {
+      if (hiddenInput) hiddenInput.value = ''
+      for (const char of e.data) {
+        if (position >= text.length) break
+        const currentChar = text[position]
+        if (currentChar === '¶') {
+          if (strict) {
+            showError = true
+            setTimeout(() => showError = false, 150)
+          }
+          continue
+        }
+        let typedKey = char
+        typedKey = typedKey
+          .replace(/[\u201C\u201D\u201E\u00AB\u00BB\u2033]/g, '"')
+          .replace(/[\u2018\u2019\u2039\u203A\u2032]/g, "'")
+          .replace(/[—–]/g, '-')
+        processChar(typedKey)
+      }
     }
   }
 
@@ -382,6 +416,8 @@
     class="hidden-input"
     oninput={handleInput}
     onkeydown={handleKeydown}
+    oncompositionstart={handleCompositionStart}
+    oncompositionend={handleCompositionEnd}
     autocomplete="off"
     autocorrect="off"
     autocapitalize="off"
