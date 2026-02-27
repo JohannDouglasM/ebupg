@@ -422,11 +422,23 @@ export function restoreBook() {
     const { title, chapters: savedChapters, hash } = JSON.parse(saved)
     if (!title || !savedChapters?.length) return false
 
-    // If we loaded from raw, apply accent normalization; otherwise re-normalize fully
+    // If loaded from old format, structure-normalize and save as raw for future use
+    let rawChapters
+    if (rawSaved) {
+      rawChapters = savedChapters
+    } else {
+      rawChapters = savedChapters.map(ch => ({
+        ...ch,
+        content: normalizeStructure(ch.content)
+      }))
+      saveRawChapters(title, rawChapters, hash)
+    }
+
     const groups = get(accentGroups)
-    const renormalizedChapters = rawSaved
-      ? savedChapters.map(ch => ({ ...ch, content: normalizeAccents(ch.content, groups) }))
-      : savedChapters.map(ch => ({ ...ch, content: normalizeText(ch.content) }))
+    const renormalizedChapters = rawChapters.map(ch => ({
+      ...ch,
+      content: normalizeAccents(ch.content, groups)
+    }))
 
     bookTitle.set(title)
     chapters.set(renormalizedChapters)
