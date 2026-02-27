@@ -116,7 +116,8 @@ function mergeAccentSettings(defaults, saved) {
   const merged = {}
   for (const [key, chars] of Object.entries(defaults)) {
     merged[key] = { ...chars }
-    if (saved[key]) {
+    // Skip old-format values (boolean) or missing keys
+    if (saved[key] && typeof saved[key] === 'object') {
       for (const ch of Object.keys(chars)) {
         if (ch in saved[key]) merged[key][ch] = saved[key][ch]
       }
