@@ -99,10 +99,34 @@ export const ACCENT_GROUPS = {
   },
 }
 
-// Accent group settings — true means "keep accents" (type them exactly)
+// Accent settings — per-character: { french: { 'é': true, 'ç': false, ... }, ... }
+// Only lowercase chars as keys; uppercase variants follow their lowercase setting.
+function buildDefaultAccentSettings() {
+  const settings = {}
+  for (const [key, group] of Object.entries(ACCENT_GROUPS)) {
+    settings[key] = {}
+    for (const ch of group.chars.split(' ')) {
+      settings[key][ch] = true
+    }
+  }
+  return settings
+}
+
+function mergeAccentSettings(defaults, saved) {
+  const merged = {}
+  for (const [key, chars] of Object.entries(defaults)) {
+    merged[key] = { ...chars }
+    if (saved[key]) {
+      for (const ch of Object.keys(chars)) {
+        if (ch in saved[key]) merged[key][ch] = saved[key][ch]
+      }
+    }
+  }
+  return merged
+}
+
 const savedAccentGroups = JSON.parse(localStorage.getItem('typingGameAccentGroups') || '{}')
-const defaultAccentGroups = Object.fromEntries(Object.keys(ACCENT_GROUPS).map(k => [k, true]))
-export const accentGroups = writable({ ...defaultAccentGroups, ...savedAccentGroups })
+export const accentGroups = writable(mergeAccentSettings(buildDefaultAccentSettings(), savedAccentGroups))
 
 accentGroups.subscribe(val => {
   localStorage.setItem('typingGameAccentGroups', JSON.stringify(val))
@@ -134,13 +158,18 @@ function normalizeStructure(text) {
     .replace(/  +/g, ' ')
 }
 
-// Replace accented chars with ASCII for disabled accent groups
-function normalizeAccents(text, groups) {
+// Replace accented chars with ASCII for individually disabled characters
+function normalizeAccents(text, settings) {
   let result = text
   for (const [key, group] of Object.entries(ACCENT_GROUPS)) {
-    if (groups[key]) continue // group enabled — keep accents
+    const charSettings = settings[key]
+    if (!charSettings) continue
     for (const [accented, ascii] of Object.entries(group.map)) {
-      result = result.split(accented).join(ascii)
+      // Look up by lowercase version of the accented char
+      const lc = accented.toLowerCase()
+      if (charSettings[lc] === false) {
+        result = result.split(accented).join(ascii)
+      }
     }
   }
   return result
