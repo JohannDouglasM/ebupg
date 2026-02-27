@@ -1,7 +1,115 @@
 import { writable, derived, get } from 'svelte/store'
 
-// Normalize text to use only keyboard-typeable characters
-function normalizeText(text) {
+// Accent groups: language → { label, chars (display), map (char→ASCII) }
+export const ACCENT_GROUPS = {
+  french: {
+    label: 'French',
+    chars: 'é è ê ë à â ç î ï ô ù û ü ÿ œ æ',
+    map: {
+      'é': 'e', 'è': 'e', 'ê': 'e', 'ë': 'e',
+      'à': 'a', 'â': 'a',
+      'ç': 'c',
+      'î': 'i', 'ï': 'i',
+      'ô': 'o',
+      'ù': 'u', 'û': 'u', 'ü': 'u',
+      'ÿ': 'y',
+      'œ': 'oe', 'æ': 'ae',
+      'É': 'E', 'È': 'E', 'Ê': 'E', 'Ë': 'E',
+      'À': 'A', 'Â': 'A',
+      'Ç': 'C',
+      'Î': 'I', 'Ï': 'I',
+      'Ô': 'O',
+      'Ù': 'U', 'Û': 'U', 'Ü': 'U',
+      'Ÿ': 'Y',
+      'Œ': 'OE', 'Æ': 'AE',
+    }
+  },
+  spanish: {
+    label: 'Spanish',
+    chars: 'á é í ó ú ñ ü ¿ ¡',
+    map: {
+      'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u',
+      'ñ': 'n', 'ü': 'u',
+      '¿': '?', '¡': '!',
+      'Á': 'A', 'É': 'E', 'Í': 'I', 'Ó': 'O', 'Ú': 'U',
+      'Ñ': 'N', 'Ü': 'U',
+    }
+  },
+  german: {
+    label: 'German',
+    chars: 'ä ö ü ß',
+    map: {
+      'ä': 'ae', 'ö': 'oe', 'ü': 'ue', 'ß': 'ss',
+      'Ä': 'AE', 'Ö': 'OE', 'Ü': 'UE',
+    }
+  },
+  portuguese: {
+    label: 'Portuguese',
+    chars: 'á â ã à ç é ê í ó ô õ ú',
+    map: {
+      'á': 'a', 'â': 'a', 'ã': 'a', 'à': 'a',
+      'ç': 'c',
+      'é': 'e', 'ê': 'e',
+      'í': 'i',
+      'ó': 'o', 'ô': 'o', 'õ': 'o',
+      'ú': 'u',
+      'Á': 'A', 'Â': 'A', 'Ã': 'A', 'À': 'A',
+      'Ç': 'C',
+      'É': 'E', 'Ê': 'E',
+      'Í': 'I',
+      'Ó': 'O', 'Ô': 'O', 'Õ': 'O',
+      'Ú': 'U',
+    }
+  },
+  italian: {
+    label: 'Italian',
+    chars: 'à è é ì ò ù',
+    map: {
+      'à': 'a', 'è': 'e', 'é': 'e', 'ì': 'i', 'ò': 'o', 'ù': 'u',
+      'À': 'A', 'È': 'E', 'É': 'E', 'Ì': 'I', 'Ò': 'O', 'Ù': 'U',
+    }
+  },
+  nordic: {
+    label: 'Nordic',
+    chars: 'å ä ö æ ø',
+    map: {
+      'å': 'a', 'ä': 'ae', 'ö': 'oe',
+      'æ': 'ae', 'ø': 'o',
+      'Å': 'A', 'Ä': 'AE', 'Ö': 'OE',
+      'Æ': 'AE', 'Ø': 'O',
+    }
+  },
+  turkish: {
+    label: 'Turkish',
+    chars: 'ç ğ ı İ ö ş ü',
+    map: {
+      'ç': 'c', 'ğ': 'g', 'ı': 'i', 'ö': 'o', 'ş': 's', 'ü': 'u',
+      'Ç': 'C', 'Ğ': 'G', 'İ': 'I', 'Ö': 'O', 'Ş': 'S', 'Ü': 'U',
+    }
+  },
+  polish: {
+    label: 'Polish',
+    chars: 'ą ć ę ł ń ó ś ź ż',
+    map: {
+      'ą': 'a', 'ć': 'c', 'ę': 'e', 'ł': 'l', 'ń': 'n',
+      'ó': 'o', 'ś': 's', 'ź': 'z', 'ż': 'z',
+      'Ą': 'A', 'Ć': 'C', 'Ę': 'E', 'Ł': 'L', 'Ń': 'N',
+      'Ó': 'O', 'Ś': 'S', 'Ź': 'Z', 'Ż': 'Z',
+    }
+  },
+}
+
+// Accent group settings — true means "keep accents" (type them exactly)
+const savedAccentGroups = JSON.parse(localStorage.getItem('typingGameAccentGroups') || '{}')
+const defaultAccentGroups = Object.fromEntries(Object.keys(ACCENT_GROUPS).map(k => [k, true]))
+export const accentGroups = writable({ ...defaultAccentGroups, ...savedAccentGroups })
+
+accentGroups.subscribe(val => {
+  localStorage.setItem('typingGameAccentGroups', JSON.stringify(val))
+})
+
+// Structural normalization (quotes, dashes, spaces, paragraphs)
+function normalizeStructure(text) {
   return text
     // Curly/smart double quotes → straight double quote
     .replace(/[\u201C\u201D\u201E\u00AB\u00BB]/g, '"')
@@ -24,6 +132,23 @@ function normalizeText(text) {
     .replace(/\n/g, ' ')
     // Clean up multiple spaces
     .replace(/  +/g, ' ')
+}
+
+// Replace accented chars with ASCII for disabled accent groups
+function normalizeAccents(text, groups) {
+  let result = text
+  for (const [key, group] of Object.entries(ACCENT_GROUPS)) {
+    if (groups[key]) continue // group enabled — keep accents
+    for (const [accented, ascii] of Object.entries(group.map)) {
+      result = result.split(accented).join(ascii)
+    }
+  }
+  return result
+}
+
+// Full normalization: structure + accents
+function normalizeText(text) {
+  return normalizeAccents(normalizeStructure(text), get(accentGroups))
 }
 
 // Book data
@@ -235,21 +360,36 @@ function saveBookData(title, normalizedChapters, hash) {
   }
 }
 
+// Save raw (structure-normalized but not accent-stripped) chapters
+function saveRawChapters(title, rawChapters, hash) {
+  try {
+    localStorage.setItem('typingGameBookRaw', JSON.stringify({
+      title,
+      chapters: rawChapters,
+      hash
+    }))
+  } catch (e) {
+    console.warn('Could not save raw book to localStorage:', e)
+  }
+}
+
 // Restore book from localStorage on page load
 export function restoreBook() {
   try {
-    const saved = localStorage.getItem('typingGameBook')
+    // Prefer raw chapters (structure-normalized only) so we can apply current accent settings
+    const rawSaved = localStorage.getItem('typingGameBookRaw')
+    const saved = rawSaved || localStorage.getItem('typingGameBook')
     if (!saved) return false
 
     const { title, chapters: savedChapters, hash } = JSON.parse(saved)
     if (!title || !savedChapters?.length) return false
 
-    const renormalizedChapters = savedChapters.map(ch => ({
-      ...ch,
-      content: normalizeText(ch.content)
-    }))
-    const sample = renormalizedChapters[0]?.content?.slice(0, 200) || ''
-    console.log('[restoreBook] sample after normalize:', JSON.stringify(sample))
+    // If we loaded from raw, apply accent normalization; otherwise re-normalize fully
+    const groups = get(accentGroups)
+    const renormalizedChapters = rawSaved
+      ? savedChapters.map(ch => ({ ...ch, content: normalizeAccents(ch.content, groups) }))
+      : savedChapters.map(ch => ({ ...ch, content: normalizeText(ch.content) }))
+
     bookTitle.set(title)
     chapters.set(renormalizedChapters)
     setBookHash(hash)
@@ -319,10 +459,17 @@ function findStartingChapter(chapterList) {
 }
 
 export function loadBook(title, chapterList) {
-  // Normalize all chapter content to use keyboard-typeable characters
-  const normalizedChapters = chapterList.map(ch => ({
+  // Structure-normalize first (quotes, dashes, etc.) — this is the "raw" version
+  const rawChapters = chapterList.map(ch => ({
     ...ch,
-    content: normalizeText(ch.content)
+    content: normalizeStructure(ch.content)
+  }))
+
+  // Apply accent normalization based on current settings
+  const groups = get(accentGroups)
+  const normalizedChapters = rawChapters.map(ch => ({
+    ...ch,
+    content: normalizeAccents(ch.content, groups)
   }))
 
   bookTitle.set(title)
@@ -332,7 +479,8 @@ export function loadBook(title, chapterList) {
   const hash = generateBookHash(chapterList)
   setBookHash(hash)
 
-  // Save book data for persistence across refreshes
+  // Save both raw and fully normalized for persistence
+  saveRawChapters(title, rawChapters, hash)
   saveBookData(title, normalizedChapters, hash)
 
   const saved = loadProgressForBook(hash)
@@ -454,6 +602,31 @@ export function setBookHash(hash) {
   currentBookHash = hash
 }
 
+// Re-apply accent settings to the current book (called when toggles change)
+export function renormalizeBook() {
+  try {
+    const rawSaved = localStorage.getItem('typingGameBookRaw')
+    if (!rawSaved) return
+
+    const { title, chapters: rawChapters, hash } = JSON.parse(rawSaved)
+    if (!title || !rawChapters?.length) return
+
+    const groups = get(accentGroups)
+    const normalizedChapters = rawChapters.map(ch => ({
+      ...ch,
+      content: normalizeAccents(ch.content, groups)
+    }))
+
+    chapters.set(normalizedChapters)
+    saveBookData(title, normalizedChapters, hash)
+
+    // Reset typing state to avoid position drift from char-count changes
+    resetTypingState()
+  } catch (e) {
+    console.warn('Could not renormalize book:', e)
+  }
+}
+
 // Close current book and clear saved book data
 export function closeBook() {
   saveProgress() // Save progress before closing
@@ -463,4 +636,5 @@ export function closeBook() {
   resetTypingState()
   currentBookHash = null
   localStorage.removeItem('typingGameBook')
+  localStorage.removeItem('typingGameBookRaw')
 }

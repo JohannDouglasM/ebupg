@@ -3,6 +3,7 @@
   import TypingGame from './components/TypingGame.svelte'
   import Stats from './components/Stats.svelte'
   import Settings from './components/Settings.svelte'
+  import SettingsPage from './components/SettingsPage.svelte'
   import { chapters, bookTitle, theme, restoreBook, closeBook } from './lib/stores.js'
 
   // Try to restore previously loaded book on page load
@@ -10,6 +11,7 @@
 
   let hasBook = $derived($chapters.length > 0)
   let currentTheme = $derived($theme)
+  let showSettingsPage = $state(false)
 
   // Apply theme class to body for full-width background
   $effect(() => {
@@ -28,13 +30,16 @@
     {/if}
   </header>
 
-  {#if !hasBook}
+  {#if showSettingsPage}
+    <SettingsPage onBack={() => showSettingsPage = false} />
+  {:else if !hasBook}
     <FileUpload />
   {:else}
     <div class="game-container">
       <div class="top-bar">
         <Stats />
         <Settings />
+        <button class="gear-button" onclick={() => showSettingsPage = true} title="Accent settings">&#9881;</button>
       </div>
       <TypingGame />
     </div>
@@ -168,6 +173,30 @@
   }
 
   .close-book:hover {
+    background: var(--button-hover);
+    color: var(--text-primary);
+  }
+
+  .gear-button {
+    background: var(--button-bg);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s, color 0.2s;
+    flex-shrink: 0;
+    align-self: center;
+  }
+
+  .gear-button:hover {
     background: var(--button-hover);
     color: var(--text-primary);
   }
