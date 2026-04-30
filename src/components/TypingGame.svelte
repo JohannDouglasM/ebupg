@@ -399,8 +399,15 @@
   </div>
 
   {#if isChapterComplete}
-    <div class="complete-overlay">
+    <div
+      class="complete-overlay"
+      role="button"
+      tabindex="-1"
+      onclick={(e) => { if (e.target === e.currentTarget) showCompleteOverlay = false }}
+      onkeydown={(e) => { if (e.key === 'Escape') showCompleteOverlay = false }}
+    >
       <div class="complete-message">
+        <button class="overlay-close" onclick={() => showCompleteOverlay = false} title="Close">×</button>
         <h3>Chapter Complete!</h3>
         {#if chapterIndex < allChapters.length - 1}
           <button onclick={() => { showCompleteOverlay = false; goToNextChapter() }}>Continue to Next Chapter</button>
@@ -637,11 +644,33 @@
   }
 
   .complete-message {
+    position: relative;
     background: var(--bg-card);
     padding: 32px 48px;
     border-radius: 12px;
     text-align: center;
     border: 1px solid var(--border);
+  }
+
+  .overlay-close {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+    border-radius: 50%;
+  }
+
+  .overlay-close:hover {
+    background: var(--button-hover);
+    color: var(--text-primary);
   }
 
   :global(main.cyberpunk) .complete-message {
